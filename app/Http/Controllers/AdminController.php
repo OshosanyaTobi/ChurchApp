@@ -11,6 +11,7 @@ class AdminController extends Controller
     // Create admin
     public function store(Request $request)
     {
+        // return 'hello';
         // Only an existing admin can create another admin
         if ($request->user()->role !== 'admin') {
             return response()->json(['message' => 'Forbidden'], 403);

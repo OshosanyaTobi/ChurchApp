@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Blog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class BlogController extends Controller
 {
@@ -109,7 +110,7 @@ class BlogController extends Controller
         }
         
         $data['updated_at'] = now();
-        \DB::table('blogs')->where('id', $id)->update($data);
+        DB::table('blogs')->where('id', $id)->update($data);
         
         $blog = Blog::find($id);
 

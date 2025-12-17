@@ -8,104 +8,122 @@ use GuzzleHttp\Client;
 
 class AudioController extends Controller
 {
-    // Admin Upload Audio
     public function store(Request $request)
     {
-        return "Hello";
-        $request->validate([
-            'title' => 'required|string',
-            'audio' => 'required|file|mimetypes:audio/mpeg,audio/mp3'
-        ]);
+        try {
+            $request->validate([
+                'title' => 'required|string',
+                'audio' => 'required|file|mimetypes:audio/mpeg,audio/mp3'
+            ]);
 
-        $file = $request->file('audio');
-
-        $client = new Client();
-
-        $response = $client->request('POST',
-            config('services.bytescale.base_url') . '/v2/accounts/' . config('services.bytescale.account_id') . '/uploads/form_data',
-            [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . config('services.bytescale.api_key'),
-                ],
-                'multipart' => [
-                    [
-                        'name' => 'file',
-                        'contents' => fopen($file->getRealPath(), 'r'),
-                        'filename' => $file->getClientOriginalName(),
+            $file = $request->file('audio');
+            $client = new Client();
+            
+            $response = $client->request(
+                'POST',
+                config('services.bytescale.base_url') . '/v2/accounts/' . config('services.bytescale.account_id') . '/uploads/form_data',
+                [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . config('services.bytescale.api_key'),
                     ],
-                    [
-                        'name' => 'path',
-                        'contents' => '/audio',
+                    'multipart' => [
+                        [
+                            'name' => 'file',
+                            'contents' => fopen($file->getRealPath(), 'r'),
+                            'filename' => $file->getClientOriginalName(),
+                        ],
+                        [
+                            'name' => 'path',
+                            'contents' => '/audio',
+                        ],
                     ],
-                ],
-            ]
-        );
+                ]
+            );
 
-        $data = json_decode($response->getBody(), true);
+            $data = json_decode($response->getBody(), true);
+            $fileData = $data['files'][0];
 
-        $audio = AudioFile::create([
-            'title'          => $request->title,
-            'file_path'      => $data['fileUrl'] ?? null,
-            'bytescale_id'   => $data['fileId'] ?? null,
-            'bytescale_path' => $data['filePath'] ?? null,
-            'user_id'        => auth()->id(),
-        ]);
+            $audio = AudioFile::create([
+                'title'          => $request->title,
+                'file_path'      => $fileData['fileUrl'],
+                'bytescale_id'   => $fileData['etag'],
+                'bytescale_path' => $fileData['filePath'],
+                'user_id'        => auth()->id(),
+            ]);
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Audio uploaded successfully',
-            'data'    => $audio
-        ], 201);
+            return response()->json([
+                'status'  => true,
+                'message' => 'Audio uploaded successfully',
+                'data'    => $audio
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Upload failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
-    // Public — Everyone can view
     public function index()
     {
-        return response()->json(AudioFile::all(['id', 'title', 'file_path', 'bytescale_path']), 200);
+        return response()->json([
+            'status' => true,
+            'message' => 'Audio files retrieved successfully',
+            'data' => AudioFile::all()
+        ], 200);
     }
 
     public function listFromBytescale()
     {
-        $client = new Client();
+        try {
+            $client = new Client();
 
-        $response = $client->request('POST',
-            config('services.bytescale.base_url') . '/v2/accounts/' . config('services.bytescale.account_id') . '/search/files',
-            [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . config('services.bytescale.api_key'),
-                    'Content-Type'  => 'application/json',
-                ],
-                'body' => json_encode([
-                    'path'  => '/audio',
-                    'limit' => 50, // adjust as needed
-                ]),
-            ]
-        );
+            $response = $client->request(
+                'POST',
+                config('services.bytescale.base_url') . '/v2/accounts/' . config('services.bytescale.account_id') . '/search/files',
+                [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . config('services.bytescale.api_key'),
+                        'Content-Type'  => 'application/json',
+                    ],
+                    'body' => json_encode([
+                        'path'  => '/audio',
+                        'limit' => 50,
+                    ]),
+                ]
+            );
 
-        $data = json_decode($response->getBody(), true);
+            $data = json_decode($response->getBody(), true);
 
-        return response()->json($data, 200);
+            return response()->json([
+                'status' => true,
+                'message' => 'Bytescale audio files retrieved successfully',
+                'data' => $data
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve files from Bytescale: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
-    // Admin Delete
     public function destroy($id)
     {
         $audio = AudioFile::find($id);
 
         if (!$audio) {
-            return response()->json(['message' => 'Audio not found'], 404);
+            return response()->json([
+                'status' => false,
+                'message' => 'Audio not found'
+            ], 404);
         }
-
-        // Optional: delete from Bytescale too
-        // $client = new Client();
-        // $client->delete(config('services.bytescale.base_url') . '/v2/accounts/' . config('services.bytescale.account_id') . '/files/' . $audio->bytescale_id, [
-        //     'headers' => [
-        //         'Authorization' => 'Bearer ' . config('services.bytescale.api_key'),
-        //     ],
-        // ]);
 
         $audio->delete();
 
-        return response()->json(['message' => 'Audio deleted'], 200);
+        return response()->json([
+            'status' => true,
+            'message' => 'Audio deleted successfully'
+        ], 200);
     }
 }
